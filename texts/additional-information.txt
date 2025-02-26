@@ -1,0 +1,58 @@
+Task Vector Representation in Large Language Models: A Layer-Wise Analysis
+Recent advancements in understanding large language models (LLMs) have revealed that the internal representations of tasks during in-context learning (ICL) are structured hierarchically across neural layers. This report synthesizes empirical evidence from multiple studies to analyze how task vectors—compressed representations of task logic derived from in-context demonstrations—are distributed across early, intermediate, and final layers of transformer-based LLMs.
+
+Layer-Wise Processing in Transformer Architectures
+Transformer-based LLMs process information through sequential layers, each refining representations of input data. While early layers handle low-level feature extraction (e.g., token embeddings and syntactic parsing), intermediate layers synthesize contextual patterns, and final layers specialize in generating coherent outputs27. Task vectors, which encapsulate the semantic and logical rules of a task from demonstration examples, emerge predominantly in intermediate layers, as these regions balance contextual abstraction and task-specific modulation134.
+
+Early Layers (First 10 Layers): Input Processing and Primitive Feature Extraction
+The initial layers of LLMs focus on foundational text processing:
+
+Token Embedding and Positional Encoding: Layers 1–3 convert input tokens into vector representations while encoding positional relationships27.
+
+Basic Syntax and Local Context: Layers 4–10 resolve part-of-speech tagging, noun-verb dependencies, and local coherence (e.g., pronoun resolution)27.
+
+These layers are not where task vectors form. Experiments altering or ablating early layers show minimal impact on ICL performance, as their outputs lack the abstract task logic required for generalization59. For instance, swapping layers 0–2 in GPT models disrupts basic tokenization but leaves higher-order reasoning intact5. Similarly, probing early-layer representations reveals limited task-specific signals, as they prioritize lexical over semantic features79.
+
+Intermediate Layers (Layers 10–25): Task Vector Formation and Refinement
+The intermediate layers serve as the primary locus for task vector creation:
+
+Task Logic Compression: Demonstrations are distilled into a single task vector that captures cross-example patterns (e.g., translation rules or arithmetic operations)134. This vector modulates how subsequent layers process queries, acting as a "blueprint" for task execution36.
+
+Semantic Abstraction: Layers 10–25 encode higher-order relationships between concepts. For example, in algorithmic tasks, these layers represent iterative operations or conditional logic detached from specific tokens16.
+
+Robustness to Perturbations: Swapping intermediate layers (e.g., layer 6 with 18) in models like GPT preserves functionality, indicating that task vectors are distributed and redundant across these regions5.
+
+Empirical validation comes from studies where injecting task vectors from unrelated tasks into intermediate layers overrides demonstration examples, proving their dominance in steering model behavior14. Additionally, entropy measurements in these layers show bimodal distributions, reflecting shifts between task-agnostic and task-specific processing phases29.
+
+Final Layers (Last 20 Layers): Output Generation and Task Execution
+The final layers specialize in generating contextually appropriate outputs guided by task vectors:
+
+Task Vector Application: Layers beyond 25 integrate the task vector with the query to produce token probabilities. For instance, in translation tasks, these layers map the task vector’s semantic rules to target-language syntax36.
+
+Output Polishing: The last 5–10 layers refine coherence, ensure grammatical correctness, and align responses with user intent79.
+
+However, final layers do not store task vectors themselves. Experiments show that replacing these layers disrupts output quality but not task understanding, as the core logic resides in intermediate representations59. For example, models can still classify tasks correctly even when final layers are perturbed, provided intermediate layers remain intact79.
+
+Architectural and Training Implications
+Model Depth and Task Complexity
+Shallow Tasks: Simple tasks (e.g., sentiment classification) stabilize in earlier intermediate layers (10–15)7.
+
+Complex Tasks: Tasks requiring multi-step reasoning (e.g., mathematical proofs) utilize deeper intermediate layers (20–25)79.
+
+Task Vector Localization Strategies
+Recent work proposes methods to strengthen task vector formation in target layers:
+
+Task Vector Prompting Loss (TVP-Loss): This auxiliary loss function encourages models to encode task vectors at predefined intermediate layers, improving robustness and reducing layer-search overhead9.
+
+Cross-Modal Generalization: Vision-language models (VLMs) demonstrate that task vectors learned from text can guide image-based queries, underscoring their layer-specific but modality-agnostic nature8.
+
+Conclusion
+The stratification of task processing across LLM layers follows a consistent pattern:
+
+Early Layers (1–10): Process tokens and local syntax.
+
+Intermediate Layers (10–25): Form and refine task vectors through semantic abstraction.
+
+Final Layers (25+): Generate outputs by applying task vectors to queries.
+
+This hierarchy explains why swapping or modifying intermediate layers preserves functionality5, while alterations to early or final layers affect input parsing or output polish, respectively. Future research could optimize layer-specific interventions (e.g., TVP-Loss9) to enhance task vector reliability and enable cross-model transfer of task representations.

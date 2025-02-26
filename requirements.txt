@@ -1,0 +1,5 @@
+transformers==4.35.0
+huggingface-hub==0.17.3
+dill==0.3.8
+fsspec==2023.5.0
+multiprocess==0.70.16
