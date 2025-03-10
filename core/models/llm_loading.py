@@ -17,7 +17,7 @@ BASE_KWARGS = {
 GPU_KWARGS = {
     **BASE_KWARGS,
     # "load_in_8bit": True,
-    # "device_map": "auto",
+    "device_map": "auto",
 }
 
 CPU_KWARGS = {
@@ -76,10 +76,10 @@ def _create_device_map(model_path: str) -> dict[str, int]:
     layer_class = get_layers(model)[0].__class__.__name__
     num_devices = torch.cuda.device_count()
 
-    # If we only have one GPU, put everything on it
+    # If we only have one GPU, use "auto" device map instead of "cuda:0"
     if num_devices <= 1:
-        return "cuda:0" if num_devices == 1 else "cpu"
-
+        return "auto" if num_devices == 1 else "cpu"
+    
     max_memory = get_balanced_memory(model, no_split_module_classes=[layer_class])
     max_memory[0] = 0
     base_device_map = infer_auto_device_map(model, max_memory=max_memory, no_split_module_classes=[layer_class])
@@ -133,42 +133,44 @@ def load_model_and_tokenizer(
 
 
 MODEL_PATHS = {
-    "pythia": {
-        "1.4B": "EleutherAI/pythia-1.4b",
-        "2.8B": "EleutherAI/pythia-2.8b",
-        "6.9B": "EleutherAI/pythia-6.9b",
-        "12B": "EleutherAI/pythia-12b",
-    },
+    # "pythia": {
+    #     "1.4B": "EleutherAI/pythia-1.4b",
+    #     "2.8B": "EleutherAI/pythia-2.8b",
+    #     "6.9B": "EleutherAI/pythia-6.9b",
+    #     "12B": "EleutherAI/pythia-12b",
+    # },
     "llama": {
-        "7B": llama_local_path("huggingface", "7B"),
-        "13B": llama_local_path("huggingface", "13B"),
-        "30B": llama_local_path("huggingface", "30B"),
-        "65B": llama_local_path("huggingface", "65B"),
+        "7B": "meta-llama/Llama-2-7b-hf",
+        # "13B": "meta-llama/Llama-2-13b",
+        # "70B": "meta-llama/Llama-2-70b",
+        # "7B-chat": "meta-llama/Llama-2-7b-chat",
+        # "13B-chat": "meta-llama/Llama-2-13b-chat",
+        # "70B-chat": "meta-llama/Llama-2-70b-chat",
     },
-    "falcon": {
-        "7B": "tiiuae/falcon-7b",
-        "40B": "tiiuae/falcon-40b",
-    },
-    "gpt-j": {
-        "6B": "EleutherAI/gpt-j-6B",
-    },
-    "gpt-2": {
-        "0.35B": "gpt2-medium",
-        "0.77B": "gpt2-large",
-        "1.5B": "gpt2-xl",
-    },
-    "mpt": {
-        "7B": "mosaicml/mpt-7b",
-    },
-    "gpt-neox": {
-        "20B": "EleutherAI/gpt-neox-20b",
-    },
-    "starcoder": {
-        "regular": "bigcode/starcoder",
-        "plus": "bigcode/starcoderplus",
-    },
-    "cerebras-gpt": {
-        "6.7B": "cerebras/Cerebras-GPT-6.7B",
-        "13B": "cerebras/Cerebras-GPT-13B",
-    },
+    # "falcon": {
+    #     "7B": "tiiuae/falcon-7b",
+    #     "40B": "tiiuae/falcon-40b",
+    # },
+    # "gpt-j": {
+    #     "6B": "EleutherAI/gpt-j-6B",
+    # },
+    # "gpt-2": {
+    #     "0.35B": "gpt2-medium",
+    #     "0.77B": "gpt2-large",
+    #     "1.5B": "gpt2-xl",
+    # },
+    # "mpt": {
+    #     "7B": "mosaicml/mpt-7b",
+    # },
+    # "gpt-neox": {
+    #     "20B": "EleutherAI/gpt-neox-20b",
+    # },
+    # "starcoder": {
+    #     "regular": "bigcode/starcoder",
+    #     "plus": "bigcode/starcoderplus",
+    # },
+    # "cerebras-gpt": {
+    #     "6.7B": "cerebras/Cerebras-GPT-6.7B",
+    #     "13B": "cerebras/Cerebras-GPT-13B",
+    # },
 }

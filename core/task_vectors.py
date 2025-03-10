@@ -349,6 +349,7 @@ def get_multiple_task_vectors(
 ) -> torch.Tensor:
     """
     Extract multiple task vectors for the same task using different demonstrations.
+    Attempts to use non-overlapping examples when possible.
     
     Args:
         model: The language model
@@ -363,32 +364,54 @@ def get_multiple_task_vectors(
     """
     all_task_vectors = []
     
+    # For each dataset, prepare all available examples upfront
+    all_examples_by_dataset = []
+    for dataset_idx, dataset in enumerate(datasets):
+        # Get the test input to exclude from demonstrations
+        test_input = dataset.test_input
+        examples_per_vector = len(dataset.train_inputs)
+        # Get all potential examples, excluding the test input
+        total_available = task.num_examples() - 1  # -1 for test example
+        # Don't try to sample more than available
+        all_examples = task.sample_inputs(min(total_available, examples_per_vector * num_vectors), exclude=[test_input])
+        all_examples_by_dataset.append(all_examples)
+    
+    # Now create vectors with as much disjoint sampling as possible
     for i in range(num_vectors):
-        # Set a random seed for this iteration
-        random.seed(i + 42)
-        
         # Create new datasets with different demonstrations
         new_datasets = []
         
-        for dataset in datasets:
-            # Get the number of examples in the current dataset
+        for dataset_idx, dataset in enumerate(datasets):
             num_examples = len(dataset.train_inputs)
+            available_examples = all_examples_by_dataset[dataset_idx]
             
-            # Create a new dataset with the same number of examples
-            # This will randomly sample different examples
-            new_dataset = task.create_dataset(num_examples, test_input=dataset.test_input)
+            # If we have enough examples for fully disjoint sets, use them
+            if len(available_examples) >= num_examples * num_vectors:
+                start_idx = i * num_examples
+                end_idx = start_idx + num_examples
+                examples_to_use = available_examples[start_idx:end_idx]
+            else:
+                # Not enough for disjoint sets - randomly sample with different seed for each vector
+                random.seed(i * 100 + 42)
+                # Shuffle all available examples differently for each vector
+                shuffled = available_examples.copy()
+                random.shuffle(shuffled)
+                examples_to_use = shuffled[:num_examples]
             
-            # Make sure the test input/output match the original dataset
-            new_dataset.test_input = dataset.test_input
-            new_dataset.test_output = dataset.test_output
+            # Create a dataset with the selected examples
+            new_dataset = FewShotDataset(
+                train_inputs=[str(x) for x in examples_to_use],
+                train_outputs=[str(task.calc_output(x)) for x in examples_to_use],
+                test_input=dataset.test_input,
+                test_output=dataset.test_output
+            )
             
             new_datasets.append(new_dataset)
         
         # Extract task vector with this set of demonstrations
         task_vector = get_task_hiddens(model, tokenizer, task, new_datasets, multi_context=multi_context)
         all_task_vectors.append(task_vector)
-    
-    # Stack all task vectors
+        
     return torch.stack(all_task_vectors)  # (num_vectors, num_datasets, num_layers, hidden_size)
 
 
