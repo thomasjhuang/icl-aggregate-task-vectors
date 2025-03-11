@@ -18,7 +18,7 @@ from core.models.llm_loading import load_model_and_tokenizer
 from core.models.utils.inference import hidden_to_logits
 from core.analysis.utils import logits_top_tokens
 from core.analysis.evaluation import calculate_accuracy_on_datasets
-from core.task_vectors import run_icl, run_task_vector
+from core.task_vectors import run_icl, run_task_vector, run_task_vector_with_fusion
 from core.utils.misc import limit_gpus, seed_everything
 from core.experiments_config import MODELS_TO_EVALUATE, TASKS_TO_EVALUATE
 
@@ -33,7 +33,6 @@ def evaluate_task(
     task_name: str, 
     num_examples: int,
     use_fusion: bool = True,
-    fusion_method: str = "mean",
     num_vectors: int = 5
 ) -> None:
     seed_everything(41)
@@ -55,41 +54,56 @@ def evaluate_task(
     icl_predictions = run_icl(model, tokenizer, task, test_datasets)
     accuracies["icl"] = calculate_accuracy_on_datasets(task, icl_predictions, test_datasets)
     
-    # Run standard task vector
-    tv_predictions, tv_dev_accuracy_by_layer, task_hiddens = run_task_vector(
-        model,
-        tokenizer,
-        task,
-        test_datasets,
-        dev_datasets,
-        use_fusion=False
-    )
-    accuracies["tv_dev_by_layer"] = tv_dev_accuracy_by_layer
-    accuracies["tv"] = calculate_accuracy_on_datasets(task, tv_predictions, test_datasets)
+    tv_ordered_tokens_by_layer = {}
     
-    # Run task vector with fusion
     if use_fusion:
-        fusion_tv_predictions, _, fusion_task_hiddens = run_task_vector(
+        # Use the comprehensive fusion function
+        fusion_results = run_task_vector_with_fusion(
             model,
             tokenizer,
             task,
             test_datasets,
             dev_datasets,
-            use_fusion=True,
-            fusion_method=fusion_method,
             num_vectors=num_vectors
         )
-        accuracies[f"tv_{fusion_method}"] = calculate_accuracy_on_datasets(task, fusion_tv_predictions, test_datasets)
-
-    # Extract top tokens for each layer
-    tv_ordered_tokens_by_layer = {}
-    try:
-        for layer_num in tv_dev_accuracy_by_layer.keys():
-            task_hidden = task_hiddens.mean(axis=0)[layer_num]
+        
+        # Store results from all methods
+        accuracies["tv"] = fusion_results["standard_accuracy"]
+        accuracies["tv_mean"] = fusion_results["mean_accuracy"]
+        # accuracies["tv_median"] = fusion_results["median_accuracy"]
+        accuracies["tv_dev_by_layer"] = fusion_results["dev_accuracy_by_layer"]
+        
+        # Extract top tokens for visualization
+        try:
+            best_layer = fusion_results["best_intermediate_layer"]
+            standard_task_hiddens = fusion_results["task_hiddens"]["standard"]
+            
+            task_hidden = standard_task_hiddens.mean(axis=0)[best_layer]
             logits = hidden_to_logits(model, task_hidden)
-            tv_ordered_tokens_by_layer[layer_num] = logits_top_tokens(logits, tokenizer, k=100)
-    except Exception as e:
-        print("Error:", e)
+            tv_ordered_tokens_by_layer[best_layer] = logits_top_tokens(logits, tokenizer, k=100)
+        except Exception as e:
+            print("Error extracting top tokens:", e)
+    else:
+        # Run standard task vector only
+        tv_predictions, tv_dev_accuracy_by_layer, task_hiddens = run_task_vector(
+            model,
+            tokenizer,
+            task,
+            test_datasets,
+            dev_datasets,
+            use_fusion=False
+        )
+        accuracies["tv"] = calculate_accuracy_on_datasets(task, tv_predictions, test_datasets)
+        accuracies["tv_dev_by_layer"] = tv_dev_accuracy_by_layer
+        
+        # Extract top tokens for each layer
+        try:
+            for layer_num in tv_dev_accuracy_by_layer.keys():
+                task_hidden = task_hiddens.mean(axis=0)[layer_num]
+                logits = hidden_to_logits(model, task_hidden)
+                tv_ordered_tokens_by_layer[layer_num] = logits_top_tokens(logits, tokenizer, k=100)
+        except Exception as e:
+            print("Error:", e)
 
     return accuracies, tv_ordered_tokens_by_layer
 
@@ -101,7 +115,6 @@ def run_main_experiment(
     model: Optional[PreTrainedModel] = None,
     tokenizer: Optional[PreTrainedTokenizer] = None,
     use_fusion: bool = True,
-    fusion_method: str = "mean",
     num_vectors: int = 5
 ) -> None:
     print("Evaluating model:", model_type, model_variant)
@@ -143,7 +156,6 @@ def run_main_experiment(
             task_name, 
             num_examples,
             use_fusion=use_fusion,
-            fusion_method=fusion_method,
             num_vectors=num_vectors
         )
 
@@ -151,22 +163,24 @@ def run_main_experiment(
         print(f"ICL Accuracy: {accuracies['icl']:.2f}")
         print(f"Task Vector Accuracy: {accuracies['tv']:.2f}")
         if use_fusion:
-            print(f"Task Vector ({fusion_method}) Accuracy: {accuracies[f'tv_{fusion_method}']:.2f}")
+            print(f"Task Vector (Mean) Accuracy: {accuracies['tv_mean']:.2f}")
+            # print(f"Task Vector (Median) Accuracy: {accuracies['tv_median']:.2f}")
         print(f"Dev Accuracy by layer: ", end="")
         for layer, accuracy in accuracies["tv_dev_by_layer"].items():
             print(f"{layer}: {accuracy:.2f}, ", end="")
         print()
         print("Time:", time.time() - tic)
 
+        # Store results
         results[task_name] = {
             "baseline_accuracy": accuracies["baseline"],
             "num_examples": num_examples,
             "icl_accuracy": accuracies["icl"],
             "tv_accuracy": accuracies["tv"],
         }
-        
+
         if use_fusion:
-            results[task_name][f"tv_{fusion_method}_accuracy"] = accuracies[f"tv_{fusion_method}"]
+            results[task_name]["tv_mean_accuracy"] = accuracies["tv_mean"]
             
         results[task_name].update({
             "tv_dev_accruacy_by_layer": accuracies["tv_dev_by_layer"],

@@ -8,11 +8,9 @@ from scripts.utils import main_experiment_results_dir, overriding_experiment_res
 MODEL_DISPLAY_NAME_MAPPING = {
     "llama_7B": "LLaMA 7B",
     "llama_13B": "LLaMA 13B",
-    "llama_30B": "LLaMA 30B",
     "gpt-j_6B": "GPT-J 6B",
     "pythia_2.8B": "Pythia 2.8B",
     "pythia_6.9B": "Pythia 6.9B",
-    "pythia_12B": "Pythia 12B",
 }
 
 
@@ -52,6 +50,8 @@ def extract_accuracies(results):
                 "icl": task_results["icl_accuracy"],
                 "tv": task_results["tv_accuracy"],
             }
+            if "tv_mean_accuracy" in task_results:
+                accuracies[model_name][task_name]["tv_mean"] = task_results["tv_mean_accuracy"]
 
     return accuracies
 
@@ -66,8 +66,10 @@ def create_accuracies_df(results):
             task_name = "_".join(task_full_name.split("_")[1:])
 
             data.append([model_name, task_type, task_name, "Baseline", task_acc["bl"]])
-            data.append([model_name, task_type, task_name, "Hypothesis", task_acc["tv"]])
+            data.append([model_name, task_type, task_name, "Task Vector", task_acc["tv"]])
             data.append([model_name, task_type, task_name, "Regular", task_acc["icl"]])
+            if "tv_mean" in task_acc:
+                data.append([model_name, task_type, task_name, "Mean Task Vector", task_acc["tv_mean"]])
 
     df = pd.DataFrame(data, columns=["model", "task_type", "task_name", "method", "accuracy"])
 

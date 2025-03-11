@@ -18,14 +18,34 @@ def create_overriding_results_table(overriding_results: dict, model_name: str):
     # Round the values to 2 decimal places
     df = df.applymap(lambda x: "{0:.2f}".format(x) if isinstance(x, (int, float)) else x)
 
-    # Change column and index names to be more readable
+    # Define column mappings based on available columns
+    column_mappings = {
+        "icl_accuracy_original": "ICL - Original",
+        "icl_accuracy_patched": "ICL - Patched",
+    }
+    
+    # Add standard task vector columns if present
+    if "standard_tv_accuracy_original" in df.columns:
+        column_mappings.update({
+            "standard_tv_accuracy_original": "Standard TV - Original",
+            "standard_tv_accuracy_patched": "Standard TV - Patched",
+        })
+    elif "tv_accuracy_original" in df.columns:
+        column_mappings.update({
+            "tv_accuracy_original": "TV - Original",
+            "tv_accuracy_patched": "TV - Patched",
+        })
+    
+    # Add mean task vector columns if present
+    if "mean_tv_accuracy_original" in df.columns:
+        column_mappings.update({
+            "mean_tv_accuracy_original": "Mean TV - Original",
+            "mean_tv_accuracy_patched": "Mean TV - Patched",
+        })
+
+    # Rename columns
     df.rename(
-        columns={
-            "icl_accuracy_original": "ICL - Demonstrations",
-            "icl_accuracy_patched": "ICL - Overriding",
-            "tv_accuracy_original": "TV - Demonstrations",
-            "tv_accuracy_patched": "TV - Overriding",
-        },
+        columns=column_mappings,
         index={
             # Replace "_" with " " and capitalize the first letter of each word
             key: key.replace("_", " ").title()
