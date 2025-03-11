@@ -14,8 +14,16 @@ from core.config import RESULTS_DIR
 from core.data.task_helpers import get_task_by_name
 from core.data.tasks.task import Task
 from core.models.llm_loading import load_model_and_tokenizer
-from core.task_vectors import run_icl, run_overriding_task_vector
+from core.task_vectors import (
+    run_icl, 
+    modulated_generate, 
+    task_vector_accuracy_by_layer,
+    get_task_hiddens,
+    get_multiple_task_vectors,
+    aggregate_task_vectors
+)
 from core.utils.misc import seed_everything
+from core.experiments_config import MODELS_TO_EVALUATE
 
 
 def is_valid_input(task: Task, inp: Any) -> bool:
@@ -35,7 +43,13 @@ OVERRIDING_TASK_PAIRS = [
 ]
 
 
-def run_overriding_experiment_on_task_pair(model, tokenizer, task_name, overriding_task_name):
+def run_overriding_experiment_on_task_pair(
+    model, 
+    tokenizer, 
+    task_name, 
+    overriding_task_name,
+    num_vectors=5
+):
     seed_everything(41)
 
     num_examples = 4
@@ -52,34 +66,83 @@ def run_overriding_experiment_on_task_pair(model, tokenizer, task_name, overridi
 
     assert len(test_datasets) == len(overriding_datasets)
 
+    # Run standard ICL for comparison
     icl_predictions = run_icl(model, tokenizer, task, test_datasets)
-    tv_predictions, tv_dev_accuracy_by_layer, task_hiddens = run_overriding_task_vector(
+    
+    # Get the best layer for task vector injection
+    dev_accuracy_by_layer = task_vector_accuracy_by_layer(
+        model,
+        tokenizer,
+        task,
+        overriding_datasets,
+    )
+    best_intermediate_layer = int(max(dev_accuracy_by_layer, key=dev_accuracy_by_layer.get))
+    
+    # 1. Get standard single task vector
+    standard_task_hiddens = get_task_hiddens(model, tokenizer, task, overriding_datasets)
+    
+    # 2. Get multiple task vectors and calculate mean
+    multiple_task_hiddens = get_multiple_task_vectors(
+        model, 
+        tokenizer, 
+        task, 
+        overriding_datasets, 
+        num_vectors=num_vectors
+    )
+    print(f"multiple_task_hiddens shape: {multiple_task_hiddens.shape}")
+    mean_task_hiddens = aggregate_task_vectors(multiple_task_hiddens, method="mean")
+    
+    # Generate predictions with standard task vector
+    standard_tv_predictions = modulated_generate(
         model,
         tokenizer,
         task,
         test_datasets,
-        overriding_datasets,
+        task_hiddens=standard_task_hiddens,
+        intermediate_layer=best_intermediate_layer,
+    )
+    
+    # Generate predictions with mean task vector
+    mean_tv_predictions = modulated_generate(
+        model,
+        tokenizer,
+        task,
+        test_datasets,
+        task_hiddens=mean_task_hiddens,
+        intermediate_layer=best_intermediate_layer,
     )
 
     expected_outputs_original = [dataset.test_output for dataset in test_datasets]
     expected_outputs_patched = [overriding_task.calc_output(dataset.test_input) for dataset in test_datasets]
 
+    # Calculate accuracies for all methods
     icl_accuracy_original = calculate_accuracy(task, icl_predictions, expected_outputs_original)
     icl_accuracy_patched = calculate_accuracy(task, icl_predictions, expected_outputs_patched)
+    
+    standard_tv_accuracy_original = calculate_accuracy(task, standard_tv_predictions, expected_outputs_original)
+    standard_tv_accuracy_patched = calculate_accuracy(task, standard_tv_predictions, expected_outputs_patched)
+    
+    mean_tv_accuracy_original = calculate_accuracy(task, mean_tv_predictions, expected_outputs_original)
+    mean_tv_accuracy_patched = calculate_accuracy(task, mean_tv_predictions, expected_outputs_patched)
 
-    tv_accuracy_original = calculate_accuracy(task, tv_predictions, expected_outputs_original)
-    tv_accuracy_patched = calculate_accuracy(task, tv_predictions, expected_outputs_patched)
-
-    print(f"ICL accuracy original: {icl_accuracy_original:.2f}")
-    print(f"ICL accuracy patched: {icl_accuracy_patched:.2f}")
-    print(f"TV accuracy original: {tv_accuracy_original:.2f}")
-    print(f"TV accuracy patched: {tv_accuracy_patched:.2f}")
+    # Print comparative results
+    print(f"\n{'=' * 50}")
+    print(f"Results for {task_name} -> {overriding_task_name}:")
+    print(f"{'Method':<15} {'Original Task':<15} {'Patched Task':<15}")
+    print(f"{'-' * 15} {'-' * 15} {'-' * 15}")
+    print(f"{'ICL':<15} {icl_accuracy_original:.4f} {icl_accuracy_patched:.4f}")
+    print(f"{'Standard TV':<15} {standard_tv_accuracy_original:.4f} {standard_tv_accuracy_patched:.4f}")
+    print(f"{'Mean TV':<15} {mean_tv_accuracy_original:.4f} {mean_tv_accuracy_patched:.4f}")
+    print(f"{'=' * 50}\n")
 
     return {
         "icl_accuracy_original": icl_accuracy_original,
         "icl_accuracy_patched": icl_accuracy_patched,
-        "tv_accuracy_original": tv_accuracy_original,
-        "tv_accuracy_patched": tv_accuracy_patched,
+        "standard_tv_accuracy_original": standard_tv_accuracy_original,
+        "standard_tv_accuracy_patched": standard_tv_accuracy_patched,
+        "mean_tv_accuracy_original": mean_tv_accuracy_original,
+        "mean_tv_accuracy_patched": mean_tv_accuracy_patched,
+        "num_vectors": num_vectors
     }
 
 
@@ -126,10 +189,8 @@ def main():
     if len(sys.argv) == 3:
         model_type, model_variant = sys.argv[1:]
     else:
-        # model_type, model_variant = "pythia", "6.9B"
-        model_type, model_variant = "llama", "13B"
-
-    run_overriding_experiment(model_type, model_variant)
+        for model_type, model_variant in MODELS_TO_EVALUATE:
+            run_overriding_experiment(model_type, model_variant)
 
 
 if __name__ == "__main__":

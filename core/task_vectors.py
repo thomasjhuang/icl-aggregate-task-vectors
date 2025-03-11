@@ -93,7 +93,24 @@ def run_overriding_task_vector(
     test_datasets: List[FewShotDataset],
     overriding_datasets: List[FewShotDataset],
     layers_to_test: Optional[Iterable[int]] = None,
+    use_aggregation: bool = True,
+    aggregation_method: str = "mean",
+    num_vectors: int = 5,
 ):
+    """
+    Run task vector overriding with vector aggregation.
+    
+    Args:
+        model: The language model
+        tokenizer: The model's tokenizer
+        task: The task to be evaluated
+        test_datasets: Datasets used for testing (inputs from Task A)
+        overriding_datasets: Datasets used for overriding (from Task B)
+        layers_to_test: Layers to test for best performance
+        use_aggregation: Whether to use aggregation of multiple task vectors
+        aggregation_method: Method to aggregate vectors ("mean")
+        num_vectors: Number of task vectors to aggregate
+    """
     dev_accuracy_by_layer = task_vector_accuracy_by_layer(
         model,
         tokenizer,
@@ -103,8 +120,18 @@ def run_overriding_task_vector(
     )
     best_intermediate_layer = int(max(dev_accuracy_by_layer, key=dev_accuracy_by_layer.get))
 
-    task_hiddens_datasets = test_datasets if overriding_datasets is None else overriding_datasets
-    task_hiddens = get_task_hiddens(model, tokenizer, task, task_hiddens_datasets)
+    if use_aggregation:
+        multiple_task_hiddens = get_multiple_task_vectors(
+            model, 
+            tokenizer, 
+            task, 
+            overriding_datasets, 
+            num_vectors=num_vectors
+        )
+        print("multiple_task_hiddens.shape: %s", multiple_task_hiddens.shape)
+        task_hiddens = aggregate_task_vectors(multiple_task_hiddens, method=aggregation_method)
+    else:
+        task_hiddens = get_task_hiddens(model, tokenizer, task, overriding_datasets)
 
     predictions = modulated_generate(
         model,
@@ -129,6 +156,8 @@ def get_multi_context_task_hiddens(
 
     outputs, forward_trace = traced_forward(model, inputs=inputs)
 
+    # This is exactly where the task vector is extracted, it is at the position where the model needs to 
+    # make a prediction.
     task_hiddens = forward_trace.residual_stream.hidden[:, :, -1, :]
 
     # for each dataset, average task hiddens from other datasets that did not include the test_input from the current dataset
@@ -473,7 +502,7 @@ def run_task_vector_with_fusion(
     
     # Aggregate task vectors
     mean_task_hiddens = aggregate_task_vectors(multiple_task_hiddens, method="mean")
-    median_task_hiddens = aggregate_task_vectors(multiple_task_hiddens, method="median")
+    # median_task_hiddens = aggregate_task_vectors(multiple_task_hiddens, method="median")
     
     # Generate predictions with standard task vector
     standard_predictions = modulated_generate(
@@ -496,32 +525,32 @@ def run_task_vector_with_fusion(
     )
     
     # Generate predictions with median task vector
-    median_predictions = modulated_generate(
-        model,
-        tokenizer,
-        task,
-        test_datasets,
-        task_hiddens=median_task_hiddens,
-        intermediate_layer=best_intermediate_layer,
-    )
+    # median_predictions = modulated_generate(
+    #     model,
+    #     tokenizer,
+    #     task,
+    #     test_datasets,
+    #     task_hiddens=median_task_hiddens,
+    #     intermediate_layer=best_intermediate_layer,
+    # )
     
     # Calculate accuracies
     standard_accuracy = calculate_accuracy_on_datasets(task, standard_predictions, test_datasets)
     mean_accuracy = calculate_accuracy_on_datasets(task, mean_predictions, test_datasets)
-    median_accuracy = calculate_accuracy_on_datasets(task, median_predictions, test_datasets)
+    # median_accuracy = calculate_accuracy_on_datasets(task, median_predictions, test_datasets)
     
     return {
         "standard_predictions": standard_predictions,
         "mean_predictions": mean_predictions,
-        "median_predictions": median_predictions,
+        # "median_predictions": median_predictions,
         "dev_accuracy_by_layer": dev_accuracy_by_layer,
         "best_intermediate_layer": best_intermediate_layer,
         "standard_accuracy": standard_accuracy,
         "mean_accuracy": mean_accuracy,
-        "median_accuracy": median_accuracy,
+        # "median_accuracy": median_accuracy,
         "task_hiddens": {
             "standard": standard_task_hiddens,
             "mean": mean_task_hiddens,
-            "median": median_task_hiddens
+            # "median": median_task_hiddens
         }
     }

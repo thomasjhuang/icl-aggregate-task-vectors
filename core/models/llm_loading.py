@@ -133,44 +133,44 @@ def load_model_and_tokenizer(
 
 
 MODEL_PATHS = {
-    # "pythia": {
-    #     "1.4B": "EleutherAI/pythia-1.4b",
-    #     "2.8B": "EleutherAI/pythia-2.8b",
-    #     "6.9B": "EleutherAI/pythia-6.9b",
-    #     "12B": "EleutherAI/pythia-12b",
-    # },
+    "pythia": {
+        "1.4B": "EleutherAI/pythia-1.4b",
+        "2.8B": "EleutherAI/pythia-2.8b",
+        "6.9B": "EleutherAI/pythia-6.9b",
+        "12B": "EleutherAI/pythia-12b",
+    },
     "llama": {
         "7B": "meta-llama/Llama-2-7b-hf",
-        # "13B": "meta-llama/Llama-2-13b",
-        # "70B": "meta-llama/Llama-2-70b",
-        # "7B-chat": "meta-llama/Llama-2-7b-chat",
-        # "13B-chat": "meta-llama/Llama-2-13b-chat",
-        # "70B-chat": "meta-llama/Llama-2-70b-chat",
+        "13B": "meta-llama/Llama-2-13b-hf",
+        "70B": "meta-llama/Llama-2-70b",
+        "7B-chat": "meta-llama/Llama-2-7b-chat",
+        "13B-chat": "meta-llama/Llama-2-13b-chat",
+        "70B-chat": "meta-llama/Llama-2-70b-chat",
     },
-    # "falcon": {
-    #     "7B": "tiiuae/falcon-7b",
-    #     "40B": "tiiuae/falcon-40b",
-    # },
-    # "gpt-j": {
-    #     "6B": "EleutherAI/gpt-j-6B",
-    # },
-    # "gpt-2": {
-    #     "0.35B": "gpt2-medium",
-    #     "0.77B": "gpt2-large",
-    #     "1.5B": "gpt2-xl",
-    # },
-    # "mpt": {
-    #     "7B": "mosaicml/mpt-7b",
-    # },
-    # "gpt-neox": {
-    #     "20B": "EleutherAI/gpt-neox-20b",
-    # },
-    # "starcoder": {
-    #     "regular": "bigcode/starcoder",
-    #     "plus": "bigcode/starcoderplus",
-    # },
-    # "cerebras-gpt": {
-    #     "6.7B": "cerebras/Cerebras-GPT-6.7B",
-    #     "13B": "cerebras/Cerebras-GPT-13B",
-    # },
+    "falcon": {
+        "7B": "tiiuae/falcon-7b",
+        "40B": "tiiuae/falcon-40b",
+    },
+    "gpt-j": {
+        "6B": "EleutherAI/gpt-j-6B",
+    },
+    "gpt-2": {
+        "0.35B": "gpt2-medium",
+        "0.77B": "gpt2-large",
+        "1.5B": "gpt2-xl",
+    },
+    "mpt": {
+        "7B": "mosaicml/mpt-7b",
+    },
+    "gpt-neox": {
+        "20B": "EleutherAI/gpt-neox-20b",
+    },
+    "starcoder": {
+        "regular": "bigcode/starcoder",
+        "plus": "bigcode/starcoderplus",
+    },
+    "cerebras-gpt": {
+        "6.7B": "cerebras/Cerebras-GPT-6.7B",
+        "13B": "cerebras/Cerebras-GPT-13B",
+    },
 }

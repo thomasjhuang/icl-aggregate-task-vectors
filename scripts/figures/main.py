@@ -39,14 +39,16 @@ def filter_tasks_with_low_icl_accuracy(grouped_accuracies_df, regular_accuracy_t
 def plot_avg_accuracies_per_model(grouped_accuracies_df):
     filtered_task_accuracies_df = filter_tasks_with_low_icl_accuracy(grouped_accuracies_df)
 
-    columns_to_plot = ["Baseline", "Hypothesis", "Regular"]
+    # Update columns to include MeanTV if it exists
+    columns_to_plot = ["Baseline", "Task Vector", "Regular"]
+    if "Mean Task Vector" in filtered_task_accuracies_df.columns:
+        columns_to_plot.append("Mean Task Vector")
 
     # Calculate average accuracy and std deviation for each model
     df_agg = filtered_task_accuracies_df.groupby("model")[columns_to_plot].agg("mean")
 
     # Plotting
-
-    # Sort the model names, firsts by the base name, then by the size (e.g. "Pythia 6.9B" < "Pythia 13B", "LLaMA 7B" < "LLaMA 13B")
+    # Sort the model names, firsts by the base name, then by the size
     model_names = df_agg.index.unique()
     num_models = len(model_names)
     model_names = sorted(model_names, key=lambda x: (x.split(" ")[0], float(x.split(" ")[1][:-1])))
@@ -55,23 +57,24 @@ def plot_avg_accuracies_per_model(grouped_accuracies_df):
 
     fig, ax = plt.subplots(figsize=(6, 6))
 
-    bar_width = 0.3
-    hatches = ["/", "\\", "|"]
+    bar_width = 0.3 if len(columns_to_plot) <= 3 else 0.25
+    hatches = ["/", "\\", "|", "x"]
+    colors = ["grey", "blue", "green", "purple"]
+    
     for j, column in enumerate(columns_to_plot):
         means = df_agg[column]
-        y_positions = np.arange(len(means)) + (j - 1) * bar_width
-        # make sure to show the model names from the index as the y ticks
+        y_positions = np.arange(len(means)) + (j - (len(columns_to_plot)-1)/2) * bar_width
         ax.barh(
             y_positions,
             means,
             height=bar_width,
             capsize=2,
-            color=["grey", "blue", "green"][j],
+            color=colors[j % len(colors)],
             edgecolor="white",
-            hatch=hatches[j] * 2,
+            hatch=hatches[j % len(hatches)] * 2,
         )
 
-    # set the y ticks to be the model names, not numbers
+    # set the y ticks to be the model names
     ax.set_yticks(np.arange(num_models))
     ax.set_yticklabels([model_name for model_name in model_names])
     ax.set_yticklabels(ax.get_yticklabels(), rotation=45, ha="right")
@@ -81,13 +84,10 @@ def plot_avg_accuracies_per_model(grouped_accuracies_df):
 
     # show legend below the plot
     legend_elements = [
-        Patch(facecolor="grey", edgecolor="white", hatch=hatches[0] * 2, label="Baseline"),
-        Patch(facecolor="green", edgecolor="white", hatch=hatches[2] * 2, label="Regular"),
-        Patch(facecolor="blue", edgecolor="white", hatch=hatches[1] * 2, label="Hypothesis"),
+        Patch(facecolor=colors[i], edgecolor="white", hatch=hatches[i % len(hatches)] * 2, label=column)
+        for i, column in enumerate(columns_to_plot)
     ]
-    ax.legend(handles=legend_elements, loc="upper center", bbox_to_anchor=(0.5, -0.1), ncol=3)
-
-    # plt.tight_layout()
+    ax.legend(handles=legend_elements, loc="upper center", bbox_to_anchor=(0.5, -0.1), ncol=len(columns_to_plot))
 
     # save the figure
     save_path = os.path.join(FIGURES_DIR, "main_experiment_results_per_model.png")
@@ -106,11 +106,9 @@ def plot_accuracy_by_layer(results, model_names: List[str], normalize_x_axis: bo
     num_layers = {
         "llama_7B": 32,
         "llama_13B": 40,
-        "llama_30B": 60,
         "gpt-j_6B": 28,
         "pythia_2.8B": 32,
         "pythia_6.9B": 32,
-        "pythia_12B": 36,
     }
 
     # Define different markers for each model
@@ -233,7 +231,6 @@ def create_results_latex_table(grouped_accuracies_df):
 
 def create_top_tokens_table(results):
     # Top Tokens
-
     task_names = [
         "algorithmic_prev_letter",
         "translation_fr_en",
@@ -241,7 +238,7 @@ def create_top_tokens_table(results):
         "knowledge_country_capital",
     ]
 
-    model_names = ["llama_13B", "pythia_12B", "gpt-j_6B"]
+    model_names = ["llama_13B", "pythia_6.9B", "gpt-j_6B"]
 
     df_data = {}
 
@@ -260,25 +257,57 @@ def create_top_tokens_table(results):
 
         top_words_per_task = {}
         for task_name in task_names:
+            # Skip if task doesn't exist in results
+            if task_name not in model_results:
+                print(f"Warning: Task {task_name} not found in results for model {model_name}")
+                top_words_per_task[task_name] = "N/A"
+                continue
+                
             task_results = model_results[task_name]
+            
+            # Skip if necessary keys don't exist
+            if "tv_dev_accruacy_by_layer" not in task_results or "tv_ordered_tokens_by_layer" not in task_results:
+                print(f"Warning: Missing required data for task {task_name} in model {model_name}")
+                top_words_per_task[task_name] = "N/A"
+                continue
 
             dev_accuracy_by_layer = task_results["tv_dev_accruacy_by_layer"]
-            best_layer = max(dev_accuracy_by_layer, key=dev_accuracy_by_layer.get) + 2
-
-            top_words = task_results["tv_ordered_tokens_by_layer"][best_layer]
-
-            top_words = [x.strip() for x in top_words]
-
-            # filter tokens that are only a-z or A-Z
-            top_words = [w for w in top_words if re.match("^[a-zA-Z]+$", w)]
-
-            # remove duplicates
-            top_words = remove_duplicates_ignore_case(top_words)
-
-            # remove short words
-            # top_words = [w for w in top_words if len(w) > 1]
-
-            top_words_per_task[task_name] = ", ".join(top_words[:20])
+            best_layer_index = max(dev_accuracy_by_layer, key=dev_accuracy_by_layer.get)
+            
+            # Calculate the layer key, but handle potential offsets safely
+            available_layers = list(task_results["tv_ordered_tokens_by_layer"].keys())
+            if not available_layers:
+                print(f"Warning: No layers found in tv_ordered_tokens_by_layer for {task_name}")
+                top_words_per_task[task_name] = "N/A"
+                continue
+                
+            # First try best_layer_index + 2
+            best_layer = best_layer_index + 2
+            
+            # If that doesn't exist, try direct mapping or nearest available
+            if best_layer not in task_results["tv_ordered_tokens_by_layer"]:
+                if best_layer_index in task_results["tv_ordered_tokens_by_layer"]:
+                    best_layer = best_layer_index
+                else:
+                    # Find closest available layer
+                    best_layer = min(available_layers, key=lambda x: abs(x - best_layer_index))
+                    print(f"Warning: Using nearest layer {best_layer} instead of {best_layer_index + 2} for {task_name}")
+            
+            try:
+                top_words = task_results["tv_ordered_tokens_by_layer"][best_layer]
+                
+                top_words = [x.strip() for x in top_words]
+                
+                # filter tokens that are only a-z or A-Z
+                top_words = [w for w in top_words if re.match("^[a-zA-Z]+$", w)]
+                
+                # remove duplicates
+                top_words = remove_duplicates_ignore_case(top_words)
+                
+                top_words_per_task[task_name] = ", ".join(top_words[:20])
+            except (KeyError, IndexError) as e:
+                print(f"Error processing top tokens for {task_name} in {model_name}: {e}")
+                top_words_per_task[task_name] = "Error"
 
         df_data[model_name] = top_words_per_task
 
@@ -300,15 +329,15 @@ def create_all_figures(experiment_id: str):
     grouped_accuracies_df = create_grouped_accuracies_df(accuracies_df)
 
     plot_avg_accuracies_per_model(grouped_accuracies_df)
-    plot_accuracy_by_layer(results, model_names=["llama_7B", "llama_13B", "llama_30B"])
+    plot_accuracy_by_layer(results, model_names=["llama_7B", "llama_13B"])
     plot_accuracy_by_layer(
-        results, model_names=["pythia_2.8B", "pythia_6.9B", "pythia_12B", "gpt-j_6B"], filename_suffix="_appendix"
+        results, model_names=["pythia_2.8B", "pythia_6.9B", "gpt-j_6B"], filename_suffix="_appendix"
     )
     create_results_latex_table(grouped_accuracies_df)
     create_top_tokens_table(results)
 
 
 if __name__ == "__main__":
-    experiment_id = "camera_ready"
+    experiment_id = "52"
 
     create_all_figures(experiment_id)
