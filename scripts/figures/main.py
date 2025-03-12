@@ -298,10 +298,8 @@ def create_top_tokens_table(results):
                 
                 top_words = [x.strip() for x in top_words]
                 
-                # filter tokens that are only a-z or A-Z
                 top_words = [w for w in top_words if re.match("^[a-zA-Z]+$", w)]
-                
-                # remove duplicates
+
                 top_words = remove_duplicates_ignore_case(top_words)
                 
                 top_words_per_task[task_name] = ", ".join(top_words[:20])
@@ -311,10 +309,8 @@ def create_top_tokens_table(results):
 
         df_data[model_name] = top_words_per_task
 
-    # create a dataframe with 2 indexes: model and task, and 1 column: top tokens
     df = pd.DataFrame.from_dict(df_data, orient="index").stack().to_frame()
 
-    # save the table as a latex table
     save_path = os.path.join(FIGURES_DIR, "top_tokens_table.tex")
     with open(save_path, "w") as f:
         f.write(df.to_latex())

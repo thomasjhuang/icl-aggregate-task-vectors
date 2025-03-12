@@ -60,16 +60,12 @@ def run_overriding_experiment_on_task_pair(
     test_datasets = task.create_datasets(num_datasets=1000, num_examples=num_examples)
     overriding_datasets = overriding_task.create_datasets(num_datasets=100, num_examples=num_examples)
 
-    # filter only test_datasets that are valid inputs for the overriding task
     test_datasets = [dataset for dataset in test_datasets if is_valid_input(overriding_task, dataset.test_input)]
     test_datasets = test_datasets[: len(overriding_datasets)]
 
     assert len(test_datasets) == len(overriding_datasets)
 
-    # Run standard ICL for comparison
     icl_predictions = run_icl(model, tokenizer, task, test_datasets)
-    
-    # Get the best layer for task vector injection
     dev_accuracy_by_layer = task_vector_accuracy_by_layer(
         model,
         tokenizer,
@@ -78,10 +74,7 @@ def run_overriding_experiment_on_task_pair(
     )
     best_intermediate_layer = int(max(dev_accuracy_by_layer, key=dev_accuracy_by_layer.get))
     
-    # 1. Get standard single task vector
     standard_task_hiddens = get_task_hiddens(model, tokenizer, task, overriding_datasets)
-    
-    # 2. Get multiple task vectors and calculate mean
     multiple_task_hiddens = get_multiple_task_vectors(
         model, 
         tokenizer, 
@@ -92,7 +85,6 @@ def run_overriding_experiment_on_task_pair(
     print(f"multiple_task_hiddens shape: {multiple_task_hiddens.shape}")
     mean_task_hiddens = aggregate_task_vectors(multiple_task_hiddens, method="mean")
     
-    # Generate predictions with standard task vector
     standard_tv_predictions = modulated_generate(
         model,
         tokenizer,
@@ -102,7 +94,6 @@ def run_overriding_experiment_on_task_pair(
         intermediate_layer=best_intermediate_layer,
     )
     
-    # Generate predictions with mean task vector
     mean_tv_predictions = modulated_generate(
         model,
         tokenizer,
@@ -115,7 +106,6 @@ def run_overriding_experiment_on_task_pair(
     expected_outputs_original = [dataset.test_output for dataset in test_datasets]
     expected_outputs_patched = [overriding_task.calc_output(dataset.test_input) for dataset in test_datasets]
 
-    # Calculate accuracies for all methods
     icl_accuracy_original = calculate_accuracy(task, icl_predictions, expected_outputs_original)
     icl_accuracy_patched = calculate_accuracy(task, icl_predictions, expected_outputs_patched)
     
